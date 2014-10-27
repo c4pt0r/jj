@@ -14,12 +14,14 @@ import (
 	log "github.com/ngaut/logging"
 )
 
-type cmdFunc func(r *resp.Resp, client *session) (*resp.Resp, error)
+type cmdFunc func(r *resp.Resp, client *session) *resp.Resp
 
 var (
 	cmdFuncs = map[string]cmdFunc{
 		"jdocset": cmdJdocSet,
 		"jdocget": cmdJdocGet,
+		"jget":    cmdJGet,
+		"jset":    cmdJSet,
 	}
 )
 
@@ -92,13 +94,11 @@ func (s *Server) handleConn(c net.Conn) {
 		if !ok {
 			ret = RespNoSuchCmd
 		} else {
-			ret, err = f(r, client)
-			if err != nil {
-				log.Warning(err)
-				return
-			}
+			ret = f(r, client)
 		}
-		b, _ := ret.Bytes()
-		client.Write(b)
+		if ret != nil {
+			b, _ := ret.Bytes()
+			client.Write(b)
+		}
 	}
 }
