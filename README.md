@@ -2,7 +2,7 @@
 
 ##Overview
 
-Redis alike NoSQL Memory DB for JSON document, support JSONPath
+Redis alike NoSQL Memory DB for JSON document, support JSON Path
 
 ```
 jdocset [key] [val]
