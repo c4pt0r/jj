@@ -4,32 +4,22 @@
 
 Redis alike NoSQL Memory DB for JSON document, support JSONPath
 
-``
-JDOCSET key jsondocstring
-JDOCGET key
+```
+jdocset [key] [val]
+jdocget [key]
 
-JSET key path value
-JGET key path
+jset [key] [json path] [val]
+jget [key] [json path]
 
-JPUSH key path value
-JPOP key path
+jincr [key] [json path] [integer]
 
-JINCR key path num
+jpush [key] [json path] [val]
+jpop [key] [json path]
 
-JREM key path
-DEL key
-
-JKEYS keyprefix[*]
-
-BGSAVE
-
-LOAD
-
-SAVE
-``
+save
+bgsave
+```
 
 * Python APIs
 * Golang APIs
 
-
->>>>>>> add README
