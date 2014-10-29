@@ -18,6 +18,11 @@ var (
 		Error: "invalid parameter",
 	}
 
+	RespNoImplement = &resp.Resp{
+		Type:  resp.ErrorResp,
+		Error: "no implement",
+	}
+
 	RespOk = &resp.Resp{
 		Type:   resp.SimpleString,
 		Status: "OK",
@@ -123,8 +128,6 @@ func cmdJdocSet(r *resp.Resp, client *session) *resp.Resp {
 		return RespErr(err)
 	}
 
-	client.srv.lock.Lock()
-	defer client.srv.lock.Unlock()
 	err = client.srv.db.PutDoc(string(k), val)
 	if err != nil {
 		log.Warning(err)
@@ -141,8 +144,6 @@ func cmdJdocGet(r *resp.Resp, client *session) *resp.Resp {
 		return RespErr(err)
 	}
 
-	client.srv.lock.RLock()
-	defer client.srv.lock.RUnlock()
 	val, _ := client.srv.db.GetDoc(string(k))
 	if val == nil {
 		return RespNil
@@ -160,31 +161,29 @@ func cmdJdocGet(r *resp.Resp, client *session) *resp.Resp {
 }
 
 func cmdJSet(r *resp.Resp, client *session) *resp.Resp {
-	client.srv.lock.Lock()
-	defer client.srv.lock.Unlock()
 	return generalSetPathVal(r, client, client.srv.db.PutPath)
 }
 
 func cmdJGet(r *resp.Resp, client *session) *resp.Resp {
-	client.srv.lock.RLock()
-	defer client.srv.lock.RUnlock()
 	return generalGetPathVal(r, client, client.srv.db.GetPath)
 }
 
 func cmdJPush(r *resp.Resp, client *session) *resp.Resp {
-	client.srv.lock.Lock()
-	defer client.srv.lock.Unlock()
 	return generalSetPathVal(r, client, client.srv.db.PushPath)
 }
 
 func cmdJPop(r *resp.Resp, client *session) *resp.Resp {
-	client.srv.lock.Lock()
-	defer client.srv.lock.Unlock()
 	return generalGetPathVal(r, client, client.srv.db.PopPath)
 }
 
 func cmdJIncr(r *resp.Resp, client *session) *resp.Resp {
-	client.srv.lock.Lock()
-	defer client.srv.lock.Unlock()
 	return generalSetPathVal(r, client, client.srv.db.IncrPath)
+}
+
+func cmdSave(r *resp.Resp, client *session) *resp.Resp {
+	return RespNoImplement
+}
+
+func cmdBgSave(r *resp.Resp, client *session) *resp.Resp {
+	return RespNoImplement
 }

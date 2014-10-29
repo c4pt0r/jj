@@ -3,9 +3,15 @@ package server
 import (
 	"errors"
 	"fmt"
+	"hash/crc32"
+	"sync"
 )
 
 var ErrNoSuchKey = errors.New("no such key")
+
+const (
+	MaxSlotSize = 1024
+)
 
 type Db interface {
 	PutDoc(key string, val interface{}) error
@@ -28,33 +34,71 @@ type KVIter interface {
 	Key() interface{}
 }
 
-type MapDb struct {
-	m map[string]interface{}
+type Slot struct {
+	m    map[string]interface{}
+	lock sync.RWMutex
 }
 
-func NewMapDb() *MapDb {
-	return &MapDb{
-		m: make(map[string]interface{}),
+func NewSlot() *Slot {
+	return &Slot{
+		m:    make(map[string]interface{}),
+		lock: sync.RWMutex{},
 	}
 }
 
+type MapDb struct {
+	slots    []*Slot
+	keyCount int
+}
+
+func NewMapDb() *MapDb {
+	// init slots
+	var slots []*Slot
+	for i := 0; i < MaxSlotSize; i++ {
+		slots = append(slots, NewSlot())
+	}
+	return &MapDb{
+		slots:    slots,
+		keyCount: 0,
+	}
+}
+
+func GetSlotIdFromKey(key string) int {
+	h := crc32.Checksum([]byte(key), crc32.IEEETable)
+	return int(h) % MaxSlotSize
+}
+
 func (db *MapDb) PutDoc(key string, val interface{}) error {
-	db.m[key] = val
+	id := GetSlotIdFromKey(key)
+	db.slots[id].lock.Lock()
+	db.slots[id].m[key] = val
+	db.slots[id].lock.Unlock()
 	return nil
 }
 
 func (db *MapDb) GetDoc(key string) (interface{}, error) {
-	val := db.m[key]
+	id := GetSlotIdFromKey(key)
+	db.slots[id].lock.RLock()
+	val := db.slots[id].m[key]
+	db.slots[id].lock.RUnlock()
 	return val, nil
 }
 
 func (db *MapDb) RemoveDoc(key string) error {
-	delete(db.m, key)
+	id := GetSlotIdFromKey(key)
+	db.slots[id].lock.Lock()
+	delete(db.slots[id].m, key)
+	db.slots[id].lock.Unlock()
 	return nil
 }
 
 func (db *MapDb) GetPath(key string, path string) (interface{}, error) {
-	if val, ok := db.m[key]; ok {
+	id := GetSlotIdFromKey(key)
+	db.slots[id].lock.RLock()
+	val, ok := db.slots[id].m[key]
+	db.slots[id].lock.RUnlock()
+
+	if ok {
 		var ret interface{}
 		err := jsonPathQuery(val, path, &ret)
 		if err != nil {
@@ -66,14 +110,20 @@ func (db *MapDb) GetPath(key string, path string) (interface{}, error) {
 }
 
 func (db *MapDb) PutPath(key string, path string, val interface{}) error {
-	if v, ok := db.m[key]; ok {
+	id := GetSlotIdFromKey(key)
+	db.slots[id].lock.Lock()
+	defer db.slots[id].lock.Unlock()
+	if v, ok := db.slots[id].m[key]; ok {
 		return jsonPathSet(v, path, val)
 	}
 	return ErrNoSuchKey
 }
 
 func (db *MapDb) IncrPath(key string, path string, val interface{}) error {
-	if v, ok := db.m[key]; ok {
+	id := GetSlotIdFromKey(key)
+	db.slots[id].lock.Lock()
+	defer db.slots[id].lock.Unlock()
+	if v, ok := db.slots[id].m[key]; ok {
 		if delta, ok := val.(float64); ok {
 			return jsonPathIncr(v, path, int(delta))
 		} else {
@@ -84,16 +134,22 @@ func (db *MapDb) IncrPath(key string, path string, val interface{}) error {
 }
 
 func (db *MapDb) PushPath(key string, path string, val interface{}) error {
-	if v, ok := db.m[key]; ok {
+	id := GetSlotIdFromKey(key)
+	db.slots[id].lock.Lock()
+	defer db.slots[id].lock.Unlock()
+	if v, ok := db.slots[id].m[key]; ok {
 		return jsonPathPush(v, path, val)
 	}
 	return ErrNoSuchKey
 }
 
 func (db *MapDb) PopPath(key string, path string) (interface{}, error) {
-	if val, ok := db.m[key]; ok {
+	id := GetSlotIdFromKey(key)
+	db.slots[id].lock.Lock()
+	defer db.slots[id].lock.Unlock()
+	if v, ok := db.slots[id].m[key]; ok {
 		var ret interface{}
-		err := jsonPathPop(val, path, &ret)
+		err := jsonPathPop(v, path, &ret)
 		if err != nil {
 			return nil, err
 		}

@@ -25,6 +25,8 @@ var (
 		"jpush":   cmdJPush,
 		"jpop":    cmdJPop,
 		"jincr":   cmdJIncr,
+		"save":    cmdSave,
+		"bgsave":  cmdBgSave,
 	}
 )
 
