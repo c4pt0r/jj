@@ -22,6 +22,9 @@ var (
 		"jdocget": cmdJdocGet,
 		"jget":    cmdJGet,
 		"jset":    cmdJSet,
+		"jpush":   cmdJPush,
+		"jpop":    cmdJPop,
+		"jincr":   cmdJIncr,
 	}
 )
 

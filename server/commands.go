@@ -13,24 +13,19 @@ var (
 		Error: "unknown command",
 	}
 
-	RespNoSuchKey = &resp.Resp{
-		Type:  resp.ErrorResp,
-		Error: "no such key",
-	}
-
 	RespInvalidParam = &resp.Resp{
 		Type:  resp.ErrorResp,
 		Error: "invalid parameter",
 	}
 
-	RespInnerError = &resp.Resp{
-		Type:  resp.ErrorResp,
-		Error: "inner error",
-	}
-
 	RespOk = &resp.Resp{
 		Type:   resp.SimpleString,
 		Status: "OK",
+	}
+
+	RespNil = &resp.Resp{
+		Type: resp.BulkResp,
+		Bulk: nil,
 	}
 )
 
@@ -39,6 +34,75 @@ func RespErr(err error) *resp.Resp {
 		Type:  resp.ErrorResp,
 		Error: err.Error(),
 	}
+}
+
+func generalSetPathVal(r *resp.Resp, client *session, fn func(string, string, interface{}) error) *resp.Resp {
+	if len(r.Multi) != 4 {
+		return RespInvalidParam
+	}
+
+	k, err := r.Key()
+	if err != nil {
+		log.Warning(err)
+		return RespErr(err)
+	}
+
+	path := string(r.Multi[2].Bulk)
+
+	var val interface{}
+	err = json.Unmarshal(r.Multi[3].Bulk, &val)
+	if err != nil {
+		log.Warning(err)
+		return RespErr(err)
+	}
+
+	err = fn(string(k), path, val)
+	if err != nil {
+		if err == ErrNoSuchKey {
+			return RespNil
+		}
+		log.Warning(err)
+		return RespErr(err)
+	}
+
+	return RespOk
+}
+
+func generalGetPathVal(r *resp.Resp, client *session, fn func(string, string) (interface{}, error)) *resp.Resp {
+	if len(r.Multi) != 3 {
+		return RespInvalidParam
+	}
+
+	k, err := r.Key()
+	if err != nil {
+		log.Warning(err)
+		return RespErr(err)
+	}
+
+	path := string(r.Multi[2].Bulk)
+	ret, err := fn(string(k), path)
+	if err != nil {
+		if err == ErrNoSuchKey {
+			return RespNil
+		}
+		log.Warning(err)
+		return RespErr(err)
+	}
+	if ret == nil {
+		return RespNil
+	}
+
+	b, err := json.Marshal(ret)
+	if err != nil {
+		log.Warning(err)
+		return RespErr(err)
+	}
+
+	return &resp.Resp{
+		Type: resp.BulkResp,
+		Bulk: b,
+	}
+
 }
 
 func cmdJdocSet(r *resp.Resp, client *session) *resp.Resp {
@@ -59,6 +123,8 @@ func cmdJdocSet(r *resp.Resp, client *session) *resp.Resp {
 		return RespErr(err)
 	}
 
+	client.srv.lock.Lock()
+	defer client.srv.lock.Unlock()
 	err = client.srv.db.PutDoc(string(k), val)
 	if err != nil {
 		log.Warning(err)
@@ -75,9 +141,11 @@ func cmdJdocGet(r *resp.Resp, client *session) *resp.Resp {
 		return RespErr(err)
 	}
 
+	client.srv.lock.RLock()
+	defer client.srv.lock.RUnlock()
 	val, _ := client.srv.db.GetDoc(string(k))
 	if val == nil {
-		return RespNoSuchKey
+		return RespNil
 	}
 	b, err := json.Marshal(val)
 	if err != nil {
@@ -92,66 +160,31 @@ func cmdJdocGet(r *resp.Resp, client *session) *resp.Resp {
 }
 
 func cmdJSet(r *resp.Resp, client *session) *resp.Resp {
-	if len(r.Multi) != 4 {
-		return RespInvalidParam
-	}
-
-	k, err := r.Key()
-	if err != nil {
-		log.Warning(err)
-		return RespErr(err)
-	}
-
-	path := string(r.Multi[2].Bulk)
-
-	var val interface{}
-	err = json.Unmarshal(r.Multi[3].Bulk, &val)
-	if err != nil {
-		log.Warning(err)
-		return RespErr(err)
-	}
-
-	err = client.srv.db.PutPath(string(k), path, val)
-	if err != nil {
-		log.Warning(err)
-		return RespErr(err)
-	}
-
-	return RespOk
+	client.srv.lock.Lock()
+	defer client.srv.lock.Unlock()
+	return generalSetPathVal(r, client, client.srv.db.PutPath)
 }
 
 func cmdJGet(r *resp.Resp, client *session) *resp.Resp {
-	if len(r.Multi) != 3 {
-		return RespInvalidParam
-	}
+	client.srv.lock.RLock()
+	defer client.srv.lock.RUnlock()
+	return generalGetPathVal(r, client, client.srv.db.GetPath)
+}
 
-	k, err := r.Key()
-	if err != nil {
-		log.Warning(err)
-		return RespErr(err)
-	}
+func cmdJPush(r *resp.Resp, client *session) *resp.Resp {
+	client.srv.lock.Lock()
+	defer client.srv.lock.Unlock()
+	return generalSetPathVal(r, client, client.srv.db.PushPath)
+}
 
-	path := string(r.Multi[2].Bulk)
-	ret, err := client.srv.db.GetPath(string(k), path)
-	if err != nil {
-		log.Warning(err)
-		return RespErr(err)
-	}
-	if ret == nil {
-		return &resp.Resp{
-			Type:  resp.ErrorResp,
-			Error: "no such field",
-		}
-	}
+func cmdJPop(r *resp.Resp, client *session) *resp.Resp {
+	client.srv.lock.Lock()
+	defer client.srv.lock.Unlock()
+	return generalGetPathVal(r, client, client.srv.db.PopPath)
+}
 
-	b, err := json.Marshal(ret)
-	if err != nil {
-		log.Warning(err)
-		return RespErr(err)
-	}
-
-	return &resp.Resp{
-		Type: resp.BulkResp,
-		Bulk: b,
-	}
+func cmdJIncr(r *resp.Resp, client *session) *resp.Resp {
+	client.srv.lock.Lock()
+	defer client.srv.lock.Unlock()
+	return generalSetPathVal(r, client, client.srv.db.IncrPath)
 }

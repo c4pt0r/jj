@@ -13,17 +13,13 @@ import (
 var re = regexp.MustCompile("^([^0-9\\s\\[][^\\s\\[]*)?(\\[-?[0-9]+\\])?$")
 
 func isArray(v interface{}) bool {
-	if _, ok := v.([]interface{}); ok {
-		return true
-	}
-	return false
+	_, ok := v.([]interface{})
+	return ok
 }
 
 func isMap(v interface{}) bool {
-	if _, ok := v.(map[string]interface{}); ok {
-		return true
-	}
-	return false
+	_, ok := v.(map[string]interface{})
+	return ok
 }
 
 func getItemFromMap(o interface{}, k string) interface{} {
@@ -106,25 +102,6 @@ func jsonPathDo(v interface{}, jp string, fn func(v interface{}), replaceWith fu
 	return nil
 }
 
-func jsonPathQuery(v interface{}, jp string, t interface{}) error {
-	return jsonPathDo(v, jp, func(v interface{}) {
-		rt := reflect.ValueOf(t).Elem()
-		rv := reflect.ValueOf(v)
-		rt.Set(rv)
-	}, nil)
-}
-
-func jsonPathIncr(v interface{}, jp string, delta int) error {
-	return jsonPathDo(v, jp, nil, func(v interface{}) interface{} {
-		if vv, ok := v.(float64); ok {
-			return int(vv) + delta
-		} else if vv, ok := v.(int); ok {
-			return vv + delta
-		}
-		return nil
-	})
-}
-
 func jsonPathSet(v interface{}, jp string, val interface{}) error {
 	cur := v
 	parts := strings.Split(jp, ".")
@@ -187,14 +164,59 @@ func jsonPathSet(v interface{}, jp string, val interface{}) error {
 	return nil
 }
 
-func jsonPathPush(v interface{}, jp string, val interface{}) error {
-	return nil
+func jsonPathQuery(v interface{}, jp string, t interface{}) error {
+	return jsonPathDo(v, jp, func(v interface{}) {
+		rt := reflect.ValueOf(t).Elem()
+		rv := reflect.ValueOf(v)
+		rt.Set(rv)
+	}, nil)
 }
 
-func jsonPathPop(v interface{}, jp string, val interface{}) error {
-	return nil
+func jsonPathIncr(v interface{}, jp string, delta int) error {
+	return jsonPathDo(v, jp, nil, func(v interface{}) interface{} {
+		if vv, ok := v.(float64); ok {
+			return int(vv) + delta
+		} else if vv, ok := v.(int); ok {
+			return vv + delta
+		}
+		return nil
+	})
+}
+
+func jsonPathPush(v interface{}, jp string, val interface{}) error {
+	return jsonPathDo(v, jp, nil, func(v interface{}) interface{} {
+		if vv, ok := v.([]interface{}); ok {
+			return append(vv, val)
+		}
+		return nil
+	})
+}
+
+func jsonPathPop(v interface{}, jp string, t interface{}) error {
+	return jsonPathDo(v, jp, nil, func(v interface{}) interface{} {
+		if vv, ok := v.([]interface{}); ok {
+			rt := reflect.ValueOf(t).Elem()
+			rv := reflect.ValueOf(vv[0])
+			rt.Set(rv)
+			return vv[1:]
+		}
+		return nil
+	})
 }
 
 func jsonPathArrayLen(v interface{}, jp string) (int, error) {
-	return 0, nil
+	sz := -1
+	err := jsonPathDo(v, jp, func(v interface{}) {
+		if vv, ok := v.([]interface{}); ok {
+			sz = len(vv)
+		}
+	}, nil)
+	if err != nil {
+		return -1, err
+	}
+	return sz, nil
+}
+
+func jsonPathRemove(v interface{}, jp string) error {
+	return nil
 }

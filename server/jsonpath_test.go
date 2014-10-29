@@ -42,10 +42,24 @@ func TestJsonPathSet(t *testing.T) {
 	log.Println(val)
 
 	err = jsonPathIncr(v, "b[20]", 100)
-	if err != nil {
-		t.Error(err)
+	if err == nil {
+		t.Error("should error")
 	}
 
 	jsonPathQuery(v, "b[20]", &val)
+	log.Println(val)
+
+	jsonPathPush(v, "b", 6)
+	jsonPathQuery(v, "b", &val)
+	log.Println(val)
+
+	var i interface{}
+	jsonPathPop(v, "b", &i)
+	log.Println(i)
+	jsonPathQuery(v, "b", &val)
+	log.Println(val)
+
+	jsonPathRemove(v, "c")
+	jsonPathQuery(v, ".", &val)
 	log.Println(val)
 }

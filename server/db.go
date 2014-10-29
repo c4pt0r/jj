@@ -1,6 +1,11 @@
 package server
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+var ErrNoSuchKey = errors.New("no such key")
 
 type Db interface {
 	PutDoc(key string, val interface{}) error
@@ -8,6 +13,9 @@ type Db interface {
 	RemoveDoc(key string) error
 	PutPath(key string, path string, val interface{}) error
 	GetPath(key string, path string) (interface{}, error)
+	IncrPath(key string, path string, val interface{}) error
+	PushPath(key string, path string, val interface{}) error
+	PopPath(key string, path string) (interface{}, error)
 	RemovePath(key string, path string) error
 	Scan(keyPrefix string) (KVIter, error)
 	Save(fileName string, context interface{}) error
@@ -54,26 +62,57 @@ func (db *MapDb) GetPath(key string, path string) (interface{}, error) {
 		}
 		return ret, nil
 	}
-	return nil, fmt.Errorf("no such key: %s", key)
+	return nil, ErrNoSuchKey
 }
 
 func (db *MapDb) PutPath(key string, path string, val interface{}) error {
-	var v interface{}
-	if _, ok := db.m[key]; !ok {
-		return fmt.Errorf("no such key: %s", key)
+	if v, ok := db.m[key]; ok {
+		return jsonPathSet(v, path, val)
 	}
-	v = db.m[key]
-	return jsonPathSet(v, path, val)
+	return ErrNoSuchKey
+}
+
+func (db *MapDb) IncrPath(key string, path string, val interface{}) error {
+	if v, ok := db.m[key]; ok {
+		if delta, ok := val.(float64); ok {
+			return jsonPathIncr(v, path, int(delta))
+		} else {
+			fmt.Errorf("type error %v", val)
+		}
+	}
+	return ErrNoSuchKey
+}
+
+func (db *MapDb) PushPath(key string, path string, val interface{}) error {
+	if v, ok := db.m[key]; ok {
+		return jsonPathPush(v, path, val)
+	}
+	return ErrNoSuchKey
+}
+
+func (db *MapDb) PopPath(key string, path string) (interface{}, error) {
+	if val, ok := db.m[key]; ok {
+		var ret interface{}
+		err := jsonPathPop(val, path, &ret)
+		if err != nil {
+			return nil, err
+		}
+		return ret, nil
+	}
+	return nil, ErrNoSuchKey
 }
 
 func (db *MapDb) RemovePath(key string, path string) error {
-	return nil
+	// TODO
+	return fmt.Errorf("not implement yet")
 }
 
 func (db *MapDb) Scan(keyPrefix string) (KVIter, error) {
-	return nil, nil
+	// TODO
+	return nil, fmt.Errorf("not implement yet")
 }
 
 func (db *MapDb) Save(fileName string, context interface{}) error {
-	return nil
+	// TODO
+	return fmt.Errorf("not implement yet")
 }
